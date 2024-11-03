@@ -3,47 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitcoin Head Chart</title>
-    <!-- React -->
-    <script src="https://unpkg.com/react@18/umd/react.development.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.min.js"></script>
-    <!-- Recharts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.0/Recharts.js"></script>
-    <!-- Babel -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <title>Test Page</title>
     <style>
         body {
             margin: 0;
-            padding: 0;
+            padding: 20px;
             background: #1a1a2e;
             color: white;
+            font-family: Arial, sans-serif;
+        }
+        .face {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
         }
     </style>
 </head>
 <body>
-    <div id="root"></div>
-    <script type="text/babel">
-        // Test component
-        const App = () => {
-            return (
-                <div style={{ padding: '20px' }}>
-                    <h1>Test Loading</h1>
-                    <img 
-                        src="images/IMG_3457.png" 
-                        alt="Test image" 
-                        style={{
-                            width: '100px',
-                            height: '100px',
-                            borderRadius: '50%'
-                        }}
-                    />
-                </div>
-            );
-        };
-
-        // Render
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+    <h1>Test Page</h1>
+    <p>If you can see this, basic HTML is working!</p>
+    <img src="images/IMG_3457.png" alt="Test face" class="face">
 </body>
 </html>

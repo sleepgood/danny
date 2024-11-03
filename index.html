@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Daniel Bitcoin</title>
+    <title>Bitcoin Wave Rider</title>
     <style>
         body, html {
             margin: 0;
@@ -38,7 +38,7 @@
             width: 50px;
             height: 50px;
             border-radius: 50%;
-            background: url('https://via.placeholder.com/50') no-repeat center center;
+            background: url('https://i.ibb.co/8mny9hs') no-repeat center center;
             background-size: cover;
             transform: translate(-50%, -50%);
         }
@@ -51,7 +51,7 @@
 </head>
 <body>
 
-    <h1>Daniel Bitcoin</h1>
+    <h1>Bitcoin Wave Rider</h1>
     <div id="chart-container">
         <canvas id="price-chart"></canvas>
         <div id="rider"></div>
@@ -74,6 +74,7 @@
             try {
                 const response = await fetch('https://api.coindesk.com/v1/bpi/currentprice/BTC.json');
                 const data = await response.json();
+                console.log("Fetched Bitcoin price:", data.bpi.USD.rate_float); // Debugging log
                 return data.bpi.USD.rate_float;
             } catch (error) {
                 console.error("Error fetching Bitcoin price:", error);
@@ -104,6 +105,11 @@
         // Draw the chart with continuous scrolling
         function drawChart() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (prices.length < 2) {
+                console.log("Waiting for enough data to draw chart..."); // Debugging log
+                return; // Wait until we have at least 2 data points
+            }
 
             // Draw Y-axis (price) and X-axis (time)
             ctx.fillStyle = '#aaa';

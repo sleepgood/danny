@@ -1,0 +1,21 @@
+{
+    "name": "Bitcoin Wave Rider",
+    "short_name": "Wave Rider",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "background_color": "#222222",
+    "theme_color": "#333333",
+    "description": "Watch your friend ride the waves of Bitcoin prices!",
+    "icons": [
+        {
+            "src": "icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

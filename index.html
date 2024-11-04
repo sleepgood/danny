@@ -36,15 +36,30 @@
             margin-bottom: 20px;
             font-weight: bold;
         }
-        .update-time {
+        .status {
             color: #888;
             font-size: 1rem;
             margin-top: 5px;
         }
-        .next-update {
-            color: #4da6ff;
-            font-size: 1rem;
-            margin-top: 5px;
+        .error {
+            color: #ff6b6b;
+            font-size: 0.9rem;
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(255, 0, 0, 0.1);
+            border-radius: 4px;
+        }
+        .retry-button {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #4da6ff;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+        }
+        .retry-button:hover {
+            background: #357abd;
         }
     </style>
 </head>
@@ -56,18 +71,20 @@
             const [priceData, setPriceData] = React.useState({
                 price: null,
                 lastUpdated: null,
-                nextUpdate: 6
+                status: 'Initializing...',
+                error: null
             });
             const [minMax, setMinMax] = React.useState({ min: 0, max: 0 });
-            const timerRef = React.useRef(null);
-            const updateCountRef = React.useRef(0);
+            const retryTimeoutRef = React.useRef(null);
+            const failedAttemptsRef = React.useRef(0);
 
             const fetchPrice = async () => {
                 try {
-                    // Add cache-busting parameter
-                    const timestamp = new Date().getTime();
+                    setPriceData(prev => ({ ...prev, status: 'Fetching price...' }));
+                    
+                    // Using the markets endpoint which seems more reliable
                     const response = await fetch(
-                        `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&nocache=${timestamp}`,
+                        'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin&order=market_cap_desc&per_page=1&page=1&sparkline=false',
                         {
                             headers: {
                                 'Accept': 'application/json',
@@ -75,26 +92,25 @@
                             }
                         }
                     );
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    console.log('New price data:', data); // Debug log
-                    
-                    if (data?.bitcoin?.usd) {
-                        const newPrice = data.bitcoin.usd;
-                        updateCountRef.current += 1;
-                        console.log(`Update #${updateCountRef.current}: ${newPrice}`); // Debug log
 
-                        setPriceData(prev => ({
+                    if (!response.ok) {
+                        throw new Error(`Error ${response.status}: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+                    console.log('API Response:', data);
+
+                    if (data && data[0] && data[0].current_price) {
+                        failedAttemptsRef.current = 0;
+                        const newPrice = data[0].current_price;
+                        
+                        setPriceData({
                             price: newPrice,
                             lastUpdated: new Date(),
-                            nextUpdate: 6
-                        }));
+                            status: 'Price updated successfully',
+                            error: null
+                        });
 
-                        // Update min/max with padding
                         setMinMax(prev => {
                             const padding = newPrice * 0.001;
                             return {
@@ -102,37 +118,49 @@
                                 max: prev.max === 0 ? newPrice + padding : Math.max(prev.max, newPrice + padding)
                             };
                         });
+
+                        // Schedule next update in 15 seconds
+                        retryTimeoutRef.current = setTimeout(fetchPrice, 15000);
+                    } else {
+                        throw new Error('Invalid data format from API');
                     }
                 } catch (error) {
-                    console.error('Fetch error:', error);
+                    console.error('Error:', error);
+                    failedAttemptsRef.current++;
+                    
+                    // Exponential backoff for retry
+                    const retryDelay = Math.min(1000 * Math.pow(2, failedAttemptsRef.current), 30000);
+                    
+                    setPriceData(prev => ({
+                        ...prev,
+                        error: `${error.message}. Retrying in ${retryDelay/1000} seconds...`,
+                        status: 'Error occurred'
+                    }));
+
+                    retryTimeoutRef.current = setTimeout(fetchPrice, retryDelay);
                 }
             };
 
-            // Set up the initial fetch and intervals
             React.useEffect(() => {
-                fetchPrice(); // Initial fetch
-
-                // Main update interval (6 seconds)
-                const updateInterval = setInterval(fetchPrice, 6000);
-
-                // Countdown timer (every second)
-                const countdownInterval = setInterval(() => {
-                    setPriceData(prev => ({
-                        ...prev,
-                        nextUpdate: prev.nextUpdate > 0 ? prev.nextUpdate - 1 : 6
-                    }));
-                }, 1000);
-
+                fetchPrice();
                 return () => {
-                    clearInterval(updateInterval);
-                    clearInterval(countdownInterval);
+                    if (retryTimeoutRef.current) {
+                        clearTimeout(retryTimeoutRef.current);
+                    }
                 };
             }, []);
 
+            const handleManualRetry = () => {
+                if (retryTimeoutRef.current) {
+                    clearTimeout(retryTimeoutRef.current);
+                }
+                failedAttemptsRef.current = 0;
+                fetchPrice();
+            };
+
             const getPosition = () => {
-                const { price } = priceData;
-                if (!price || minMax.max === minMax.min) return '50%';
-                const position = 100 - ((price - minMax.min) / (minMax.max - minMax.min) * 100);
+                if (!priceData.price || minMax.max === minMax.min) return '50%';
+                const position = 100 - ((priceData.price - minMax.min) / (minMax.max - minMax.min) * 100);
                 return `${position}%`;
             };
 
@@ -144,12 +172,20 @@
                             maximumFractionDigits: 2
                         }) : 'Loading...'}
                     </div>
-                    <div className="update-time">
-                        Updated: {priceData.lastUpdated ? priceData.lastUpdated.toLocaleTimeString() : '-'}
-                    </div>
-                    <div className="next-update">
-                        Next update in: {priceData.nextUpdate}s
-                    </div>
+                    <div className="status">{priceData.status}</div>
+                    {priceData.lastUpdated && (
+                        <div className="status">
+                            Last updated: {priceData.lastUpdated.toLocaleTimeString()}
+                        </div>
+                    )}
+                    {priceData.error && (
+                        <div>
+                            <div className="error">{priceData.error}</div>
+                            <button className="retry-button" onClick={handleManualRetry}>
+                                Retry Now
+                            </button>
+                        </div>
+                    )}
                     <img
                         src="images/IMG_3457.png"
                         alt="Floating head"

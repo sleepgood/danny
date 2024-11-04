@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Breaking Head</title>
+    <title>Head Breaker</title>
     <style>
         body {
             margin: 0;
@@ -70,9 +70,9 @@
         window.addEventListener('resize', resizeCanvas);
 
         // Game objects
-        const paddleHeight = Math.min(canvas.height * 0.12, 80);
-        const paddleWidth = Math.min(canvas.width * 0.25, 120);
-        let paddleRadius = paddleHeight / 2;
+        const paddleHeight = Math.min(canvas.height * 0.12, 80);  // Larger paddle
+        const paddleWidth = Math.min(canvas.width * 0.25, 120);   // Wider paddle
+        const paddleRadius = paddleHeight / 2;  // For circular collision
         const ballRadius = Math.min(canvas.width * 0.02, 15);
         const brickRowCount = 5;
         const brickColumnCount = 5;
@@ -82,42 +82,6 @@
         const brickOffsetTop = 50;
         const brickOffsetLeft = 20;
 
-        // Particle system
-        class Particle {
-            constructor(x, y, angle) {
-                this.x = x;
-                this.y = y;
-                this.size = Math.random() * 10 + 5;
-                this.speedX = Math.cos(angle) * (Math.random() * 5 + 2);
-                this.speedY = Math.sin(angle) * (Math.random() * 5 + 2);
-                this.life = 1;
-                this.gravity = 0.2;
-            }
-
-            update() {
-                this.x += this.speedX;
-                this.y += this.speedY;
-                this.speedY += this.gravity;
-                this.life -= 0.02;
-                this.size *= 0.95;
-            }
-
-            draw(ctx) {
-                ctx.save();
-                ctx.globalAlpha = this.life;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fillStyle = '#666';
-                ctx.fill();
-                ctx.restore();
-            }
-        }
-
-        let particles = [];
-        let paddleDamage = 0; // 0 to 1, where 1 is fully destroyed
-        let hits = 0;
-        const maxHits = 10; // Number of hits before game over
-
         let score = 0;
         let gameStarted = false;
         let paddleX = (canvas.width - paddleWidth) / 2;
@@ -125,31 +89,21 @@
         let ballY = canvas.height - paddleHeight - ballRadius;
         let ballSpeedX = canvas.width * 0.005;
         let ballSpeedY = -canvas.width * 0.005;
+        let lastFrameTime = 0;
+
+        // Create bricks
+        const bricks = [];
+        for(let c = 0; c < brickColumnCount; c++) {
+            bricks[c] = [];
+            for(let r = 0; r < brickRowCount; r++) {
+                bricks[c][r] = { x: 0, y: 0, status: 1 };
+            }
+        }
 
         const paddleImg = new Image();
         paddleImg.src = 'images/IMG_3457.png';
 
-        // Create mask for destructible paddle
-        let maskCanvas = document.createElement('canvas');
-        maskCanvas.width = paddleWidth;
-        maskCanvas.height = paddleHeight;
-        let maskCtx = maskCanvas.getContext('2d');
-
-        function updatePaddleMask(x, y) {
-            const radius = 20; // Size of the chunk to remove
-            maskCtx.beginPath();
-            maskCtx.arc(x, y, radius, 0, Math.PI * 2);
-            maskCtx.fillStyle = 'rgba(0, 0, 0, 1)';
-            maskCtx.fill();
-        }
-
-        function createParticles(x, y) {
-            for(let i = 0; i < 10; i++) {
-                const angle = (Math.PI * 2 / 10) * i;
-                particles.push(new Particle(x, y, angle));
-            }
-        }
-
+        // Touch controls
         canvas.addEventListener('touchmove', function(e) {
             e.preventDefault();
             const touch = e.touches[0];
@@ -163,99 +117,110 @@
             if (!gameStarted) {
                 gameStarted = true;
                 tapToStart.classList.remove('active');
-                // Initialize mask
-                maskCtx.fillStyle = 'white';
-                maskCtx.fillRect(0, 0, paddleWidth, paddleHeight);
             }
         });
 
+        // Improved circular collision detection
         function checkPaddleCollision() {
             const paddleCenterX = paddleX + paddleWidth/2;
             const paddleCenterY = canvas.height - paddleHeight/2;
             
+            // Calculate distance between ball and paddle center
             const dx = ballX - paddleCenterX;
             const dy = ballY - paddleCenterY;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            if (distance < paddleRadius * (1 - paddleDamage) + ballRadius) {
+            // Check if ball is within paddle's circular area
+            if (distance < paddleRadius + ballRadius) {
+                // Calculate angle of collision
                 const angle = Math.atan2(dy, dx);
+                
+                // Set new ball direction based on collision angle
                 const speed = Math.sqrt(ballSpeedX * ballSpeedX + ballSpeedY * ballSpeedY);
+                ballSpeedX = Math.cos(angle) * speed;
+                ballSpeedY = -Math.abs(Math.sin(angle) * speed); // Always go up
                 
-                // Create particles and damage at collision point
-                const hitX = (dx / distance * paddleRadius) + paddleWidth/2;
-                const hitY = (dy / distance * paddleRadius) + paddleHeight/2;
-                createParticles(paddleX + hitX, canvas.height - paddleHeight + hitY);
-                updatePaddleMask(hitX, hitY);
+                // Add some randomness to prevent repetitive patterns
+                ballSpeedX += (Math.random() - 0.5) * 2;
                 
-                hits++;
-                paddleDamage = hits / maxHits;
-                paddleRadius *= (1 - 0.1); // Shrink paddle radius
-
-                if (hits >= maxHits) {
-                    alert('Your head is completely broken! Game Over!');
-                    document.location.reload();
-                    return false;
-                }
-
-                ballSpeedX = Math.cos(angle) * speed * 1.1; // Increase speed slightly
-                ballSpeedY = -Math.abs(Math.sin(angle) * speed);
+                // Visual feedback
+                ctx.beginPath();
+                ctx.arc(paddleCenterX, paddleCenterY, paddleRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
                 return true;
             }
             return false;
         }
 
-        function drawPaddle() {
-            ctx.save();
-            
-            // Draw the clipped head image
-            ctx.beginPath();
-            ctx.arc(paddleX + paddleWidth/2, canvas.height - paddleHeight/2, 
-                   paddleRadius * (1 - paddleDamage), 0, Math.PI*2);
-            ctx.closePath();
-            ctx.clip();
-            
-            // Apply the damage mask
-            ctx.globalCompositeOperation = 'source-in';
-            ctx.drawImage(maskCanvas, paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
-            
-            // Draw the actual head
-            ctx.globalCompositeOperation = 'source-atop';
-            ctx.drawImage(paddleImg, paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
-            
-            ctx.restore();
-        }
-
-        function draw(timestamp) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Draw bricks
+        function collisionDetection() {
             for(let c = 0; c < brickColumnCount; c++) {
                 for(let r = 0; r < brickRowCount; r++) {
-                    const brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
-                    const brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
-                    ctx.beginPath();
-                    ctx.rect(brickX, brickY, brickWidth, brickHeight);
-                    ctx.fillStyle = `hsl(${(c + r) * 25}, 70%, 60%)`;
-                    ctx.fill();
-                    ctx.closePath();
+                    const b = bricks[c][r];
+                    if(b.status === 1) {
+                        if(ballX > b.x && ballX < b.x + brickWidth && ballY > b.y && ballY < b.y + brickHeight) {
+                            ballSpeedY = -ballSpeedY;
+                            b.status = 0;
+                            score++;
+                            scoreElement.textContent = score;
+                            
+                            if(score === brickRowCount * brickColumnCount) {
+                                alert('YOU WIN!');
+                                document.location.reload();
+                            }
+                        }
+                    }
                 }
             }
+        }
 
-            // Update and draw particles
-            particles = particles.filter(p => p.life > 0);
-            particles.forEach(p => {
-                p.update();
-                p.draw(ctx);
-            });
-
-            // Draw ball
+        function drawBall() {
             ctx.beginPath();
             ctx.arc(ballX, ballY, ballRadius, 0, Math.PI*2);
             ctx.fillStyle = '#00ff00';
             ctx.fill();
             ctx.closePath();
+        }
 
+        function drawPaddle() {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(paddleX + paddleWidth/2, canvas.height - paddleHeight/2, paddleRadius, 0, Math.PI*2);
+            ctx.closePath();
+            ctx.clip();
+            ctx.drawImage(paddleImg, paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
+            ctx.restore();
+        }
+
+        function drawBricks() {
+            for(let c = 0; c < brickColumnCount; c++) {
+                for(let r = 0; r < brickRowCount; r++) {
+                    if(bricks[c][r].status === 1) {
+                        const brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
+                        const brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
+                        bricks[c][r].x = brickX;
+                        bricks[c][r].y = brickY;
+                        ctx.beginPath();
+                        ctx.rect(brickX, brickY, brickWidth, brickHeight);
+                        ctx.fillStyle = `hsl(${(c + r) * 25}, 70%, 60%)`;
+                        ctx.fill();
+                        ctx.closePath();
+                    }
+                }
+            }
+        }
+
+        function draw(timestamp) {
+            const deltaTime = timestamp - lastFrameTime;
+            lastFrameTime = timestamp;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBricks();
+            drawBall();
             drawPaddle();
+            collisionDetection();
 
             if (gameStarted) {
                 if(ballX + ballSpeedX > canvas.width - ballRadius || ballX + ballSpeedX < ballRadius) {
@@ -282,11 +247,7 @@
             requestAnimationFrame(draw);
         }
 
-        paddleImg.onload = () => {
-            maskCtx.fillStyle = 'white';
-            maskCtx.fillRect(0, 0, paddleWidth, paddleHeight);
-            requestAnimationFrame(draw);
-        };
+        paddleImg.onload = () => requestAnimationFrame(draw);
     </script>
 </body>
 </html>

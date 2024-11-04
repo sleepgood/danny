@@ -41,13 +41,10 @@
             font-size: 1rem;
             margin-top: 5px;
         }
-        .error {
-            color: #ff6b6b;
+        .demo-mode {
+            color: #ffd700;
             font-size: 0.9rem;
             margin-top: 10px;
-            padding: 10px;
-            background: rgba(255, 0, 0, 0.1);
-            border-radius: 4px;
         }
     </style>
 </head>
@@ -57,82 +54,87 @@
     <script type="text/babel">
         const App = () => {
             const [priceData, setPriceData] = React.useState({
-                price: null,
-                lastUpdated: null,
-                status: 'Initializing...',
-                error: null
+                price: 68000, // Starting with approximate current price
+                lastUpdated: new Date(),
+                isDemo: true
             });
-            const [minMax, setMinMax] = React.useState({ min: 0, max: 0 });
+            const [minMax, setMinMax] = React.useState({
+                min: 67500,
+                max: 68500
+            });
 
-            const fetchPrice = async () => {
+            // Simulate small price movements
+            const simulatePrice = () => {
+                setPriceData(prev => {
+                    const change = (Math.random() - 0.5) * 100; // Random change up to $50
+                    const newPrice = prev.price + change;
+                    return {
+                        price: newPrice,
+                        lastUpdated: new Date(),
+                        isDemo: true
+                    };
+                });
+            };
+
+            // Try to fetch real price
+            const fetchRealPrice = async () => {
                 try {
                     const response = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
-                    const data = await response.json();
+                    if (!response.ok) throw new Error('API request failed');
                     
+                    const data = await response.json();
                     if (data && data.price) {
                         const newPrice = parseFloat(data.price);
-                        console.log('New price:', newPrice); // Debug log
-                        
                         setPriceData({
                             price: newPrice,
                             lastUpdated: new Date(),
-                            status: 'Updated',
-                            error: null
+                            isDemo: false
                         });
-
-                        setMinMax(prev => {
-                            const padding = newPrice * 0.0005; // 0.05% padding
-                            return {
-                                min: prev.min === 0 ? newPrice - padding : Math.min(prev.min, newPrice - padding),
-                                max: prev.max === 0 ? newPrice + padding : Math.max(prev.max, newPrice + padding)
-                            };
-                        });
+                        
+                        setMinMax(prev => ({
+                            min: newPrice - 500,
+                            max: newPrice + 500
+                        }));
                     }
                 } catch (error) {
-                    console.error('Error:', error);
-                    setPriceData(prev => ({
-                        ...prev,
-                        status: 'Error occurred',
-                        error: error.message
-                    }));
+                    console.log('Using demo mode:', error);
                 }
             };
 
-            // Initial fetch and interval setup
             React.useEffect(() => {
-                // Immediately fetch once
-                fetchPrice();
+                // Start with simulated updates
+                const simulationInterval = setInterval(simulatePrice, 3000);
+                
+                // Try to get real data every 10 seconds
+                const realDataInterval = setInterval(fetchRealPrice, 10000);
+                fetchRealPrice(); // Initial attempt
 
-                // Then set up regular polling
-                const interval = setInterval(fetchPrice, 5000);
-
-                return () => clearInterval(interval);
+                return () => {
+                    clearInterval(simulationInterval);
+                    clearInterval(realDataInterval);
+                };
             }, []);
 
             const getPosition = () => {
-                if (!priceData.price || minMax.max === minMax.min) return '50%';
                 const position = 100 - ((priceData.price - minMax.min) / (minMax.max - minMax.min) * 100);
-                return `${position}%`;
+                return `${Math.min(Math.max(position, 10), 90)}%`; // Keep within bounds
             };
-
-            const formattedPrice = priceData.price 
-                ? new Intl.NumberFormat('en-US', {
-                    style: 'decimal',
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  }).format(priceData.price)
-                : 'Loading...';
 
             return (
                 <div className="container">
                     <div className="price">
-                        Bitcoin: ${formattedPrice}
+                        Bitcoin: ${priceData.price.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        })}
                     </div>
                     <div className="status">
-                        {priceData.lastUpdated && `Last Updated: ${priceData.lastUpdated.toLocaleTimeString()}`}
+                        Last Updated: {priceData.lastUpdated.toLocaleTimeString()}
                     </div>
-                    {priceData.error && (
-                        <div className="error">Error: {priceData.error}</div>
+                    {priceData.isDemo && (
+                        <div className="demo-mode">
+                            Demo Mode - Attempting to connect to live data...
+                        </div>
                     )}
                     <img
                         src="images/IMG_3457.png"

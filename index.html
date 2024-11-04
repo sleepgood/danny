@@ -62,7 +62,6 @@
         const scoreElement = document.getElementById('score');
         const tapToStart = document.getElementById('tapToStart');
 
-        // Set canvas size to match device width
         function resizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight * 0.8;
@@ -71,9 +70,10 @@
         window.addEventListener('resize', resizeCanvas);
 
         // Game objects
-        const paddleHeight = Math.min(canvas.height * 0.08, 60);  // Larger paddle
-        const paddleWidth = Math.min(canvas.width * 0.2, 100);    // Wider paddle
-        const ballRadius = Math.min(canvas.width * 0.02, 15);     // Larger ball
+        const paddleHeight = Math.min(canvas.height * 0.12, 80);  // Larger paddle
+        const paddleWidth = Math.min(canvas.width * 0.25, 120);   // Wider paddle
+        const paddleRadius = paddleHeight / 2;  // For circular collision
+        const ballRadius = Math.min(canvas.width * 0.02, 15);
         const brickRowCount = 5;
         const brickColumnCount = 5;
         const brickWidth = (canvas.width - 40) / brickColumnCount - 10;
@@ -89,6 +89,7 @@
         let ballY = canvas.height - paddleHeight - ballRadius;
         let ballSpeedX = canvas.width * 0.005;
         let ballSpeedY = -canvas.width * 0.005;
+        let lastFrameTime = 0;
 
         // Create bricks
         const bricks = [];
@@ -99,7 +100,6 @@
             }
         }
 
-        // Load paddle image
         const paddleImg = new Image();
         paddleImg.src = 'images/IMG_3457.png';
 
@@ -113,13 +113,47 @@
             }
         }, { passive: false });
 
-        // Start game on tap
         document.addEventListener('touchstart', function(e) {
             if (!gameStarted) {
                 gameStarted = true;
                 tapToStart.classList.remove('active');
             }
         });
+
+        // Improved circular collision detection
+        function checkPaddleCollision() {
+            const paddleCenterX = paddleX + paddleWidth/2;
+            const paddleCenterY = canvas.height - paddleHeight/2;
+            
+            // Calculate distance between ball and paddle center
+            const dx = ballX - paddleCenterX;
+            const dy = ballY - paddleCenterY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Check if ball is within paddle's circular area
+            if (distance < paddleRadius + ballRadius) {
+                // Calculate angle of collision
+                const angle = Math.atan2(dy, dx);
+                
+                // Set new ball direction based on collision angle
+                const speed = Math.sqrt(ballSpeedX * ballSpeedX + ballSpeedY * ballSpeedY);
+                ballSpeedX = Math.cos(angle) * speed;
+                ballSpeedY = -Math.abs(Math.sin(angle) * speed); // Always go up
+                
+                // Add some randomness to prevent repetitive patterns
+                ballSpeedX += (Math.random() - 0.5) * 2;
+                
+                // Visual feedback
+                ctx.beginPath();
+                ctx.arc(paddleCenterX, paddleCenterY, paddleRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                return true;
+            }
+            return false;
+        }
 
         function collisionDetection() {
             for(let c = 0; c < brickColumnCount; c++) {
@@ -151,10 +185,9 @@
         }
 
         function drawPaddle() {
-            // Draw a larger, more visible paddle
             ctx.save();
             ctx.beginPath();
-            ctx.arc(paddleX + paddleWidth/2, canvas.height - paddleHeight/2, paddleHeight/1.5, 0, Math.PI*2);
+            ctx.arc(paddleX + paddleWidth/2, canvas.height - paddleHeight/2, paddleRadius, 0, Math.PI*2);
             ctx.closePath();
             ctx.clip();
             ctx.drawImage(paddleImg, paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
@@ -179,7 +212,10 @@
             }
         }
 
-        function draw() {
+        function draw(timestamp) {
+            const deltaTime = timestamp - lastFrameTime;
+            lastFrameTime = timestamp;
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawBricks();
             drawBall();
@@ -193,10 +229,8 @@
                 if(ballY + ballSpeedY < ballRadius) {
                     ballSpeedY = -ballSpeedY;
                 } else if(ballY + ballSpeedY > canvas.height - ballRadius) {
-                    if(ballX > paddleX && ballX < paddleX + paddleWidth) {
-                        ballSpeedY = -ballSpeedY;
-                        const hitPos = (ballX - (paddleX + paddleWidth/2)) / (paddleWidth/2);
-                        ballSpeedX = hitPos * (canvas.width * 0.008);
+                    if(checkPaddleCollision()) {
+                        // Ball already reflected in checkPaddleCollision
                     } else {
                         alert('GAME OVER');
                         document.location.reload();
@@ -213,7 +247,7 @@
             requestAnimationFrame(draw);
         }
 
-        paddleImg.onload = draw;
+        paddleImg.onload = () => requestAnimationFrame(draw);
     </script>
 </body>
 </html>

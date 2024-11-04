@@ -35,12 +35,21 @@
             font-size: 2.5rem;
             margin-bottom: 20px;
             font-weight: bold;
-            transition: all 0.3s ease;
         }
         .status {
             color: #666;
             font-size: 0.8rem;
             margin-top: 10px;
+        }
+        .error {
+            color: #ff6b6b;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+        .countdown {
+            color: #4da6ff;
+            font-size: 0.8rem;
+            margin-top: 5px;
         }
     </style>
 </head>
@@ -50,65 +59,99 @@
     <script type="text/babel">
         const App = () => {
             const [price, setPrice] = React.useState(null);
-            const [status, setStatus] = React.useState('Connecting...');
+            const [displayPrice, setDisplayPrice] = React.useState(null);
+            const [status, setStatus] = React.useState('Initializing...');
+            const [error, setError] = React.useState(null);
             const [minMax, setMinMax] = React.useState({ min: 0, max: 0 });
-            const [buffer, setBuffer] = React.useState([]);
-            const wsRef = React.useRef(null);
+            const [countdown, setCountdown] = React.useState(6);
+            const lastPriceRef = React.useRef(null);
+            const intervalRef = React.useRef(null);
 
-            React.useEffect(() => {
-                const connectWebSocket = () => {
-                    wsRef.current = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+            // Fetch price from CoinGecko
+            const fetchPrice = async () => {
+                try {
+                    setStatus('Fetching price...');
+                    const response = await fetch(
+                        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
+                        {
+                            headers: { 'Accept': 'application/json' }
+                        }
+                    );
                     
-                    wsRef.current.onmessage = (event) => {
-                        const data = JSON.parse(event.data);
-                        const newPrice = parseFloat(data.p);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data?.bitcoin?.usd) {
+                        const newPrice = data.bitcoin.usd;
+                        setPrice(newPrice);
+                        lastPriceRef.current = newPrice;
                         
-                        setBuffer(prev => {
-                            const newBuffer = [...prev, newPrice].slice(-30);
-                            const avgPrice = newBuffer.reduce((a, b) => a + b, 0) / newBuffer.length;
-                            
-                            setPrice(avgPrice);
-                            setMinMax(prev => ({
-                                min: Math.min(prev.min || avgPrice, avgPrice - 100),
-                                max: Math.max(prev.max || avgPrice, avgPrice + 100)
-                            }));
-                            
-                            return newBuffer;
+                        // Update min/max with padding
+                        setMinMax(prev => {
+                            const padding = newPrice * 0.001; // 0.1% padding
+                            return {
+                                min: Math.min(prev.min || newPrice, newPrice) - padding,
+                                max: Math.max(prev.max || newPrice, newPrice) + padding
+                            };
                         });
-                        
-                        setStatus(`Live: ${new Date().toLocaleTimeString()}`);
-                    };
 
-                    wsRef.current.onclose = () => {
-                        setStatus('Reconnecting...');
-                        setTimeout(connectWebSocket, 1000);
-                    };
+                        setStatus(`Updated: ${new Date().toLocaleTimeString()}`);
+                        setError(null);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    setError(`Error: ${error.message}`);
+                }
+            };
 
-                    wsRef.current.onerror = () => {
-                        setStatus('Connection error - retrying...');
-                        wsRef.current.close();
-                    };
+            // Initial fetch and interval setup
+            React.useEffect(() => {
+                fetchPrice();
+                
+                // Set up the 6-second interval for API calls
+                const fetchInterval = setInterval(() => {
+                    fetchPrice();
+                    setCountdown(6);
+                }, 6000);
+
+                // Set up the countdown timer
+                const countdownInterval = setInterval(() => {
+                    setCountdown(prev => (prev > 0 ? prev - 1 : 6));
+                }, 1000);
+
+                return () => {
+                    clearInterval(fetchInterval);
+                    clearInterval(countdownInterval);
                 };
-
-                connectWebSocket();
-                return () => wsRef.current?.close();
             }, []);
 
+            // Smooth price updates
+            React.useEffect(() => {
+                if (price !== null) {
+                    setDisplayPrice(price);
+                }
+            }, [price]);
+
             const getPosition = () => {
-                if (!price || minMax.max === minMax.min) return '50%';
-                const position = 100 - ((price - minMax.min) / (minMax.max - minMax.min) * 100);
+                if (!displayPrice || minMax.max === minMax.min) return '50%';
+                const position = 100 - ((displayPrice - minMax.min) / (minMax.max - minMax.min) * 100);
                 return `${position}%`;
             };
 
             return (
                 <div className="container">
                     <div className="price">
-                        Bitcoin: ${price ? price.toLocaleString(undefined, {
+                        Bitcoin: ${displayPrice ? displayPrice.toLocaleString(undefined, {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2
-                        }) : 'Connecting...'}
+                        }) : 'Loading...'}
                     </div>
                     <div className="status">{status}</div>
+                    {error && <div className="error">{error}</div>}
+                    <div className="countdown">Next update in: {countdown}s</div>
                     <img
                         src="images/IMG_3457.png"
                         alt="Floating head"

@@ -4,10 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bitcoin Head Chart</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Load React from cdnjs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <!-- Load Recharts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.10.3/Recharts.js"></script>
+    <!-- Load Babel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -18,9 +21,14 @@
             height: 100vh;
             overflow: hidden;
         }
-        .container {
+        .price {
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .chart-container {
             position: relative;
-            height: calc(100vh - 40px);
+            height: calc(100vh - 100px);
             width: 100%;
         }
         .face {
@@ -30,12 +38,6 @@
             position: absolute;
             transition: all 0.3s ease-out;
             z-index: 10;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-        .price {
-            font-size: 2rem;
-            text-align: center;
-            margin-bottom: 20px;
         }
     </style>
 </head>
@@ -43,125 +45,88 @@
     <div id="root"></div>
 
     <script type="text/babel">
+        // Test that React is loaded
+        console.log('React version:', React.version);
+        // Test that Recharts is loaded
+        console.log('Recharts loaded:', typeof Recharts !== 'undefined');
+
         const { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } = Recharts;
 
-        const App = () => {
+        function App() {
             const [price, setPrice] = React.useState(null);
             const [priceHistory, setPriceHistory] = React.useState([]);
-            const [minMax, setMinMax] = React.useState({ min: 0, max: 0 });
 
+            // Fetch price data
             React.useEffect(() => {
                 const fetchPrice = async () => {
                     try {
                         const response = await fetch(
-                            'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
-                            {
-                                method: 'GET',
-                                headers: { 'Accept': 'application/json' }
-                            }
+                            'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd'
                         );
-                        
                         const data = await response.json();
-                        
                         if (data?.bitcoin?.usd) {
                             const newPrice = data.bitcoin.usd;
-                            const timestamp = new Date().getTime();
-                            
                             setPrice(newPrice);
                             setPriceHistory(prev => {
-                                const newHistory = [...prev, { timestamp, price: newPrice }];
-                                if (newHistory.length > 50) newHistory.shift();
-                                return newHistory;
+                                const newPoint = {
+                                    time: new Date().toLocaleTimeString(),
+                                    price: newPrice
+                                };
+                                return [...prev.slice(-19), newPoint];
                             });
-
-                            // Update min/max with padding
-                            const padding = newPrice * 0.001; // 0.1% padding
-                            setMinMax(prev => ({
-                                min: Math.min(prev.min || newPrice, newPrice) - padding,
-                                max: Math.max(prev.max || newPrice, newPrice) + padding
-                            }));
                         }
                     } catch (error) {
-                        console.error('Error fetching price:', error);
+                        console.error('Error:', error);
                     }
                 };
 
                 fetchPrice();
-                const interval = setInterval(fetchPrice, 5000); // Update every 5 seconds
+                const interval = setInterval(fetchPrice, 5000);
                 return () => clearInterval(interval);
             }, []);
 
-            const formatTime = (timestamp) => {
-                return new Date(timestamp).toLocaleTimeString();
-            };
-
-            const CustomTooltip = ({ active, payload }) => {
-                if (active && payload && payload.length) {
-                    return (
-                        <div style={{ 
-                            background: '#1a1a2e', 
-                            border: '1px solid #fff',
-                            padding: '10px',
-                            borderRadius: '4px'
-                        }}>
-                            <p>{`Time: ${formatTime(payload[0].payload.timestamp)}`}</p>
-                            <p>{`Price: $${payload[0].value.toLocaleString()}`}</p>
-                        </div>
-                    );
-                }
-                return null;
-            };
-
             return (
-                <div className="container">
+                <div>
                     <div className="price">
                         Bitcoin: ${price ? price.toLocaleString() : 'Loading...'}
                     </div>
-                    <div style={{ position: 'relative', width: '100%', height: 'calc(100% - 100px)' }}>
-                        {price && (
-                            <img 
-                                src="images/IMG_3457.png"
-                                alt="Floating head"
-                                className="face"
-                                style={{
-                                    top: `${100 - ((price - minMax.min) / (minMax.max - minMax.min) * 100)}%`,
-                                    right: '20px',
-                                    transform: 'translateY(-50%)'
-                                }}
-                            />
+                    <div className="chart-container">
+                        {priceHistory.length > 0 && (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={priceHistory}>
+                                    <XAxis 
+                                        dataKey="time"
+                                        stroke="#fff"
+                                    />
+                                    <YAxis 
+                                        stroke="#fff"
+                                        tickFormatter={value => `$${value.toLocaleString()}`}
+                                    />
+                                    <Line 
+                                        type="monotone"
+                                        dataKey="price"
+                                        stroke="#00ff00"
+                                        strokeWidth={2}
+                                        dot={false}
+                                        isAnimationActive={false}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
                         )}
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart 
-                                data={priceHistory}
-                                margin={{ top: 5, right: 50, left: 50, bottom: 5 }}
-                            >
-                                <XAxis 
-                                    dataKey="timestamp"
-                                    tickFormatter={formatTime}
-                                    stroke="#fff"
-                                    tick={{ fill: '#fff' }}
-                                />
-                                <YAxis 
-                                    domain={[minMax.min, minMax.max]}
-                                    tickFormatter={val => `$${val.toLocaleString()}`}
-                                    stroke="#fff"
-                                    tick={{ fill: '#fff' }}
-                                />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Line 
-                                    type="monotone"
-                                    dataKey="price"
-                                    stroke="#00ff00"
-                                    strokeWidth={2}
-                                    dot={false}
-                                    isAnimationActive={false}
-                                />
-                            </LineChart>
-                        </ResponsiveContainer>
+                        <img 
+                            src="images/IMG_3457.png"
+                            alt="Floating head"
+                            className="face"
+                            style={{
+                                top: price ? `${50}%` : '50%',
+                                right: '20px',
+                                transform: 'translateY(-50%)'
+                            }}
+                        />
                     </div>
                 </div>
             );
-        };
+        }
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);

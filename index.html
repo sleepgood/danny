@@ -3,11 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitcoin Head Chart</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <title>Head Breaker</title>
     <style>
         body {
             margin: 0;
@@ -15,156 +11,225 @@
             background: #1a1a2e;
             color: white;
             font-family: Arial, sans-serif;
-            height: 100vh;
-            overflow: hidden;
-        }
-        .container {
-            height: 100vh;
             display: flex;
             flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
         }
-        .price {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            font-weight: bold;
-            text-align: center;
+        #gameCanvas {
+            background: #1a1a2e;
+            border: 2px solid #333;
+            border-radius: 8px;
         }
-        .status {
+        .score {
+            font-size: 24px;
+            margin: 10px 0;
+            color: #00ff00;
+        }
+        .instructions {
+            margin: 10px 0;
             color: #888;
             text-align: center;
-            margin-bottom: 20px;
-        }
-        .chart-container {
-            position: relative;
-            height: calc(100% - 150px);
-            width: 100%;
-        }
-        .face {
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            position: absolute;
-            transition: all 0.3s ease-out;
-            z-index: 10;
-        }
-        .demo-mode {
-            color: #ffd700;
-            text-align: center;
-            margin-top: 5px;
         }
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div class="score">Score: <span id="score">0</span></div>
+    <canvas id="gameCanvas"></canvas>
+    <div class="instructions">
+        Use Left/Right Arrow Keys or Mouse to Move<br>
+        Press Space to Start
+    </div>
 
-    <script type="text/babel">
-        const { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } = Recharts;
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
 
-        const App = () => {
-            const [priceData, setPriceData] = React.useState({
-                current: 68000,
-                history: [],
-                lastUpdated: new Date(),
-                isDemo: true
-            });
+        // Set canvas size
+        canvas.width = 800;
+        canvas.height = 600;
 
-            // Initialize price history
-            React.useEffect(() => {
-                const initialHistory = Array(30).fill(null).map((_, i) => ({
-                    timestamp: new Date(Date.now() - (29-i) * 1000),
-                    price: 68000 + (Math.random() - 0.5) * 200
-                }));
-                setPriceData(prev => ({
-                    ...prev,
-                    history: initialHistory
-                }));
-            }, []);
+        // Game objects
+        const paddleHeight = 40;
+        const paddleWidth = 80;
+        const ballRadius = 10;
+        const brickRowCount = 5;
+        const brickColumnCount = 8;
+        const brickWidth = 80;
+        const brickHeight = 20;
+        const brickPadding = 10;
+        const brickOffsetTop = 50;
+        const brickOffsetLeft = 60;
 
-            // Update price every second
-            React.useEffect(() => {
-                const updatePrice = () => {
-                    setPriceData(prev => {
-                        const newPrice = prev.current + (Math.random() - 0.5) * 100;
-                        const newHistory = [
-                            ...prev.history.slice(-29),
-                            { timestamp: new Date(), price: newPrice }
-                        ];
-                        return {
-                            current: newPrice,
-                            history: newHistory,
-                            lastUpdated: new Date(),
-                            isDemo: true
-                        };
-                    });
-                };
+        let score = 0;
+        let gameStarted = false;
+        let paddleX = (canvas.width - paddleWidth) / 2;
+        let ballX = canvas.width / 2;
+        let ballY = canvas.height - paddleHeight - ballRadius;
+        let ballSpeedX = 5;
+        let ballSpeedY = -5;
+        let rightPressed = false;
+        let leftPressed = false;
+        let lastMouseX = 0;
 
-                const interval = setInterval(updatePrice, 1000);
-                return () => clearInterval(interval);
-            }, []);
+        // Create bricks
+        const bricks = [];
+        for(let c = 0; c < brickColumnCount; c++) {
+            bricks[c] = [];
+            for(let r = 0; r < brickRowCount; r++) {
+                bricks[c][r] = { x: 0, y: 0, status: 1 };
+            }
+        }
 
-            const formatPrice = (price) => {
-                return new Intl.NumberFormat('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                }).format(price);
-            };
+        // Load paddle image (your head)
+        const paddleImg = new Image();
+        paddleImg.src = 'images/IMG_3457.png';
 
-            return (
-                <div className="container">
-                    <div className="price">
-                        Bitcoin: ${formatPrice(priceData.current)}
-                    </div>
-                    <div className="status">
-                        Last Updated: {priceData.lastUpdated.toLocaleTimeString()}
-                    </div>
-                    {priceData.isDemo && (
-                        <div className="demo-mode">Demo Mode - Attempting to connect to live data...</div>
-                    )}
-                    <div className="chart-container">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={priceData.history} margin={{ top: 50, right: 80, left: 50, bottom: 20 }}>
-                                <XAxis 
-                                    dataKey="timestamp" 
-                                    tickFormatter={(time) => time.toLocaleTimeString()} 
-                                    stroke="#666"
-                                />
-                                <YAxis 
-                                    domain={['auto', 'auto']}
-                                    tickFormatter={(price) => formatPrice(price)}
-                                    stroke="#666"
-                                />
-                                <Tooltip 
-                                    labelFormatter={(label) => new Date(label).toLocaleTimeString()}
-                                    formatter={(value) => ['$' + formatPrice(value), 'Price']}
-                                    contentStyle={{ background: '#1a1a2e', border: '1px solid #666' }}
-                                />
-                                <Line 
-                                    type="monotone" 
-                                    dataKey="price" 
-                                    stroke="#00ff00" 
-                                    strokeWidth={2}
-                                    dot={false}
-                                    isAnimationActive={false}
-                                />
-                            </LineChart>
-                        </ResponsiveContainer>
-                        <img
-                            src="images/IMG_3457.png"
-                            alt="Floating head"
-                            className="face"
-                            style={{
-                                top: '50%',
-                                right: '48px',
-                                transform: 'translateY(-50%)'
-                            }}
-                        />
-                    </div>
-                </div>
-            );
-        };
+        // Event listeners
+        document.addEventListener('keydown', keyDownHandler);
+        document.addEventListener('keyup', keyUpHandler);
+        document.addEventListener('mousemove', mouseMoveHandler);
+        document.addEventListener('keypress', spaceHandler);
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        function spaceHandler(e) {
+            if (e.code === 'Space' && !gameStarted) {
+                gameStarted = true;
+            }
+        }
+
+        function keyDownHandler(e) {
+            if(e.key === 'Right' || e.key === 'ArrowRight') {
+                rightPressed = true;
+            }
+            else if(e.key === 'Left' || e.key === 'ArrowLeft') {
+                leftPressed = true;
+            }
+        }
+
+        function keyUpHandler(e) {
+            if(e.key === 'Right' || e.key === 'ArrowRight') {
+                rightPressed = false;
+            }
+            else if(e.key === 'Left' || e.key === 'ArrowLeft') {
+                leftPressed = false;
+            }
+        }
+
+        function mouseMoveHandler(e) {
+            const relativeX = e.clientX - canvas.offsetLeft;
+            if(relativeX > 0 && relativeX < canvas.width) {
+                paddleX = relativeX - paddleWidth/2;
+            }
+        }
+
+        function collisionDetection() {
+            for(let c = 0; c < brickColumnCount; c++) {
+                for(let r = 0; r < brickRowCount; r++) {
+                    const b = bricks[c][r];
+                    if(b.status === 1) {
+                        if(ballX > b.x && ballX < b.x + brickWidth && ballY > b.y && ballY < b.y + brickHeight) {
+                            ballSpeedY = -ballSpeedY;
+                            b.status = 0;
+                            score++;
+                            scoreElement.textContent = score;
+                            
+                            // Win condition
+                            if(score === brickRowCount * brickColumnCount) {
+                                alert('YOU WIN!');
+                                document.location.reload();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, ballRadius, 0, Math.PI*2);
+            ctx.fillStyle = '#00ff00';
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawPaddle() {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(paddleX + paddleWidth/2, canvas.height - paddleHeight/2, paddleHeight/2, 0, Math.PI*2);
+            ctx.closePath();
+            ctx.clip();
+            ctx.drawImage(paddleImg, paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
+            ctx.restore();
+        }
+
+        function drawBricks() {
+            for(let c = 0; c < brickColumnCount; c++) {
+                for(let r = 0; r < brickRowCount; r++) {
+                    if(bricks[c][r].status === 1) {
+                        const brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
+                        const brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
+                        bricks[c][r].x = brickX;
+                        bricks[c][r].y = brickY;
+                        ctx.beginPath();
+                        ctx.rect(brickX, brickY, brickWidth, brickHeight);
+                        ctx.fillStyle = `hsl(${c * 30 + r * 20}, 70%, 60%)`;
+                        ctx.fill();
+                        ctx.closePath();
+                    }
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBricks();
+            drawBall();
+            drawPaddle();
+            collisionDetection();
+
+            if (gameStarted) {
+                // Ball collision with walls
+                if(ballX + ballSpeedX > canvas.width - ballRadius || ballX + ballSpeedX < ballRadius) {
+                    ballSpeedX = -ballSpeedX;
+                }
+                if(ballY + ballSpeedY < ballRadius) {
+                    ballSpeedY = -ballSpeedY;
+                } else if(ballY + ballSpeedY > canvas.height - ballRadius) {
+                    if(ballX > paddleX && ballX < paddleX + paddleWidth) {
+                        ballSpeedY = -ballSpeedY;
+                        // Add angle based on where ball hits paddle
+                        const hitPos = (ballX - (paddleX + paddleWidth/2)) / (paddleWidth/2);
+                        ballSpeedX = hitPos * 8;
+                    } else {
+                        alert('GAME OVER');
+                        document.location.reload();
+                    }
+                }
+
+                // Move ball
+                ballX += ballSpeedX;
+                ballY += ballSpeedY;
+            } else {
+                // Keep ball on paddle before start
+                ballX = paddleX + paddleWidth/2;
+                ballY = canvas.height - paddleHeight - ballRadius;
+            }
+
+            // Move paddle
+            if(rightPressed && paddleX < canvas.width - paddleWidth) {
+                paddleX += 7;
+            }
+            else if(leftPressed && paddleX > 0) {
+                paddleX -= 7;
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        // Start the game
+        paddleImg.onload = draw;
     </script>
 </body>
 </html>

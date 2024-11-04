@@ -3,14 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitcoin Head Chart</title>
-    <!-- Load React from cdnjs -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-    <!-- Load Recharts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.10.3/Recharts.js"></script>
-    <!-- Load Babel -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <title>Bitcoin Head Tracker</title>
+    <!-- React -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -21,23 +18,29 @@
             height: 100vh;
             overflow: hidden;
         }
-        .price {
-            font-size: 2rem;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .chart-container {
+        .container {
             position: relative;
-            height: calc(100vh - 100px);
-            width: 100%;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         .face {
-            width: 64px;
-            height: 64px;
+            width: 150px;
+            height: 150px;
             border-radius: 50%;
             position: absolute;
-            transition: all 0.3s ease-out;
-            z-index: 10;
+            transition: all 0.5s ease-out;
+        }
+        .price {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .status {
+            color: #666;
+            font-size: 0.8rem;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -45,88 +48,74 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        // Test that React is loaded
-        console.log('React version:', React.version);
-        // Test that Recharts is loaded
-        console.log('Recharts loaded:', typeof Recharts !== 'undefined');
-
-        const { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } = Recharts;
-
-        function App() {
+        const App = () => {
             const [price, setPrice] = React.useState(null);
-            const [priceHistory, setPriceHistory] = React.useState([]);
+            const [status, setStatus] = React.useState('Loading...');
+            const [minMax, setMinMax] = React.useState({ min: 0, max: 0 });
 
-            // Fetch price data
             React.useEffect(() => {
                 const fetchPrice = async () => {
                     try {
                         const response = await fetch(
-                            'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd'
+                            'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
+                            {
+                                method: 'GET',
+                                headers: {
+                                    'Accept': 'application/json',
+                                }
+                            }
                         );
+                        
                         const data = await response.json();
-                        if (data?.bitcoin?.usd) {
-                            const newPrice = data.bitcoin.usd;
-                            setPrice(newPrice);
-                            setPriceHistory(prev => {
-                                const newPoint = {
-                                    time: new Date().toLocaleTimeString(),
-                                    price: newPrice
-                                };
-                                return [...prev.slice(-19), newPoint];
-                            });
+                        
+                        if (data && data.bitcoin && data.bitcoin.usd) {
+                            const btcPrice = data.bitcoin.usd;
+                            setPrice(btcPrice);
+                            setStatus(`Last updated: ${new Date().toLocaleTimeString()}`);
+                            setMinMax(prev => ({
+                                min: prev.min === 0 ? btcPrice - 1000 : Math.min(prev.min, btcPrice - 500),
+                                max: prev.max === 0 ? btcPrice + 1000 : Math.max(prev.max, btcPrice + 500)
+                            }));
                         }
                     } catch (error) {
-                        console.error('Error:', error);
+                        console.error('Error fetching price:', error);
+                        setStatus(`Error: ${error.message}`);
                     }
                 };
 
+                // Initial fetch
                 fetchPrice();
-                const interval = setInterval(fetchPrice, 5000);
+
+                // Update every 3 seconds
+                const interval = setInterval(fetchPrice, 3000);
                 return () => clearInterval(interval);
             }, []);
 
+            const getPosition = () => {
+                if (!price || minMax.max === minMax.min) return '50%';
+                const position = 100 - ((price - minMax.min) / (minMax.max - minMax.min) * 100);
+                return `${position}%`;
+            };
+
             return (
-                <div>
+                <div className="container">
                     <div className="price">
                         Bitcoin: ${price ? price.toLocaleString() : 'Loading...'}
                     </div>
-                    <div className="chart-container">
-                        {priceHistory.length > 0 && (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={priceHistory}>
-                                    <XAxis 
-                                        dataKey="time"
-                                        stroke="#fff"
-                                    />
-                                    <YAxis 
-                                        stroke="#fff"
-                                        tickFormatter={value => `$${value.toLocaleString()}`}
-                                    />
-                                    <Line 
-                                        type="monotone"
-                                        dataKey="price"
-                                        stroke="#00ff00"
-                                        strokeWidth={2}
-                                        dot={false}
-                                        isAnimationActive={false}
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        )}
-                        <img 
-                            src="images/IMG_3457.png"
-                            alt="Floating head"
-                            className="face"
-                            style={{
-                                top: price ? `${50}%` : '50%',
-                                right: '20px',
-                                transform: 'translateY(-50%)'
-                            }}
-                        />
-                    </div>
+                    <div className="status">{status}</div>
+                    <img
+                        src="images/IMG_3457.png"
+                        alt="Floating head"
+                        className="face"
+                        style={{
+                            top: getPosition(),
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)'
+                        }}
+                    />
                 </div>
             );
-        }
+        };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);

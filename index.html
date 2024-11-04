@@ -2,77 +2,93 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Head Breaker</title>
     <style>
         body {
             margin: 0;
-            padding: 20px;
+            padding: 0;
             background: #1a1a2e;
             color: white;
             font-family: Arial, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
-            min-height: 100vh;
+            height: 100vh;
             overflow: hidden;
+            touch-action: none;
         }
         #gameCanvas {
             background: #1a1a2e;
-            border: 2px solid #333;
-            border-radius: 8px;
+            width: 100%;
+            touch-action: none;
         }
         .score {
-            font-size: 24px;
+            font-size: 32px;
             margin: 10px 0;
             color: #00ff00;
         }
-        .instructions {
-            margin: 10px 0;
-            color: #888;
-            text-align: center;
+        .tap-to-start {
+            position: fixed;
+            bottom: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 0, 0.2);
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 20px;
+            color: #00ff00;
+            animation: pulse 1.5s infinite;
+            display: none;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .active {
+            display: block;
         }
     </style>
 </head>
 <body>
     <div class="score">Score: <span id="score">0</span></div>
     <canvas id="gameCanvas"></canvas>
-    <div class="instructions">
-        Use Left/Right Arrow Keys or Mouse to Move<br>
-        Press Space to Start
-    </div>
+    <div id="tapToStart" class="tap-to-start active">Tap anywhere to start</div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const scoreElement = document.getElementById('score');
+        const tapToStart = document.getElementById('tapToStart');
 
-        // Set canvas size
-        canvas.width = 800;
-        canvas.height = 600;
+        // Set canvas size to match device width
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight * 0.8;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
 
         // Game objects
-        const paddleHeight = 40;
-        const paddleWidth = 80;
-        const ballRadius = 10;
+        const paddleHeight = Math.min(canvas.height * 0.08, 60);  // Larger paddle
+        const paddleWidth = Math.min(canvas.width * 0.2, 100);    // Wider paddle
+        const ballRadius = Math.min(canvas.width * 0.02, 15);     // Larger ball
         const brickRowCount = 5;
-        const brickColumnCount = 8;
-        const brickWidth = 80;
-        const brickHeight = 20;
+        const brickColumnCount = 5;
+        const brickWidth = (canvas.width - 40) / brickColumnCount - 10;
+        const brickHeight = 30;
         const brickPadding = 10;
         const brickOffsetTop = 50;
-        const brickOffsetLeft = 60;
+        const brickOffsetLeft = 20;
 
         let score = 0;
         let gameStarted = false;
         let paddleX = (canvas.width - paddleWidth) / 2;
         let ballX = canvas.width / 2;
         let ballY = canvas.height - paddleHeight - ballRadius;
-        let ballSpeedX = 5;
-        let ballSpeedY = -5;
-        let rightPressed = false;
-        let leftPressed = false;
-        let lastMouseX = 0;
+        let ballSpeedX = canvas.width * 0.005;
+        let ballSpeedY = -canvas.width * 0.005;
 
         // Create bricks
         const bricks = [];
@@ -83,46 +99,27 @@
             }
         }
 
-        // Load paddle image (your head)
+        // Load paddle image
         const paddleImg = new Image();
         paddleImg.src = 'images/IMG_3457.png';
 
-        // Event listeners
-        document.addEventListener('keydown', keyDownHandler);
-        document.addEventListener('keyup', keyUpHandler);
-        document.addEventListener('mousemove', mouseMoveHandler);
-        document.addEventListener('keypress', spaceHandler);
-
-        function spaceHandler(e) {
-            if (e.code === 'Space' && !gameStarted) {
-                gameStarted = true;
-            }
-        }
-
-        function keyDownHandler(e) {
-            if(e.key === 'Right' || e.key === 'ArrowRight') {
-                rightPressed = true;
-            }
-            else if(e.key === 'Left' || e.key === 'ArrowLeft') {
-                leftPressed = true;
-            }
-        }
-
-        function keyUpHandler(e) {
-            if(e.key === 'Right' || e.key === 'ArrowRight') {
-                rightPressed = false;
-            }
-            else if(e.key === 'Left' || e.key === 'ArrowLeft') {
-                leftPressed = false;
-            }
-        }
-
-        function mouseMoveHandler(e) {
-            const relativeX = e.clientX - canvas.offsetLeft;
+        // Touch controls
+        canvas.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const relativeX = touch.clientX;
             if(relativeX > 0 && relativeX < canvas.width) {
                 paddleX = relativeX - paddleWidth/2;
             }
-        }
+        }, { passive: false });
+
+        // Start game on tap
+        document.addEventListener('touchstart', function(e) {
+            if (!gameStarted) {
+                gameStarted = true;
+                tapToStart.classList.remove('active');
+            }
+        });
 
         function collisionDetection() {
             for(let c = 0; c < brickColumnCount; c++) {
@@ -135,7 +132,6 @@
                             score++;
                             scoreElement.textContent = score;
                             
-                            // Win condition
                             if(score === brickRowCount * brickColumnCount) {
                                 alert('YOU WIN!');
                                 document.location.reload();
@@ -155,9 +151,10 @@
         }
 
         function drawPaddle() {
+            // Draw a larger, more visible paddle
             ctx.save();
             ctx.beginPath();
-            ctx.arc(paddleX + paddleWidth/2, canvas.height - paddleHeight/2, paddleHeight/2, 0, Math.PI*2);
+            ctx.arc(paddleX + paddleWidth/2, canvas.height - paddleHeight/2, paddleHeight/1.5, 0, Math.PI*2);
             ctx.closePath();
             ctx.clip();
             ctx.drawImage(paddleImg, paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
@@ -174,7 +171,7 @@
                         bricks[c][r].y = brickY;
                         ctx.beginPath();
                         ctx.rect(brickX, brickY, brickWidth, brickHeight);
-                        ctx.fillStyle = `hsl(${c * 30 + r * 20}, 70%, 60%)`;
+                        ctx.fillStyle = `hsl(${(c + r) * 25}, 70%, 60%)`;
                         ctx.fill();
                         ctx.closePath();
                     }
@@ -190,7 +187,6 @@
             collisionDetection();
 
             if (gameStarted) {
-                // Ball collision with walls
                 if(ballX + ballSpeedX > canvas.width - ballRadius || ballX + ballSpeedX < ballRadius) {
                     ballSpeedX = -ballSpeedX;
                 }
@@ -199,36 +195,24 @@
                 } else if(ballY + ballSpeedY > canvas.height - ballRadius) {
                     if(ballX > paddleX && ballX < paddleX + paddleWidth) {
                         ballSpeedY = -ballSpeedY;
-                        // Add angle based on where ball hits paddle
                         const hitPos = (ballX - (paddleX + paddleWidth/2)) / (paddleWidth/2);
-                        ballSpeedX = hitPos * 8;
+                        ballSpeedX = hitPos * (canvas.width * 0.008);
                     } else {
                         alert('GAME OVER');
                         document.location.reload();
                     }
                 }
 
-                // Move ball
                 ballX += ballSpeedX;
                 ballY += ballSpeedY;
             } else {
-                // Keep ball on paddle before start
                 ballX = paddleX + paddleWidth/2;
                 ballY = canvas.height - paddleHeight - ballRadius;
-            }
-
-            // Move paddle
-            if(rightPressed && paddleX < canvas.width - paddleWidth) {
-                paddleX += 7;
-            }
-            else if(leftPressed && paddleX > 0) {
-                paddleX -= 7;
             }
 
             requestAnimationFrame(draw);
         }
 
-        // Start the game
         paddleImg.onload = draw;
     </script>
 </body>

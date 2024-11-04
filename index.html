@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitcoin Head Tracker</title>
+    <title>Bitcoin Head Chart</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         body {
@@ -18,33 +19,38 @@
             overflow: hidden;
         }
         .container {
-            position: relative;
-            height: 80vh;
+            height: 100vh;
             display: flex;
             flex-direction: column;
-            align-items: center;
-        }
-        .face {
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            position: absolute;
-            transition: all 1s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .price {
             font-size: 2.5rem;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             font-weight: bold;
+            text-align: center;
         }
         .status {
             color: #888;
-            font-size: 1rem;
-            margin-top: 5px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .chart-container {
+            position: relative;
+            height: calc(100% - 150px);
+            width: 100%;
+        }
+        .face {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            position: absolute;
+            transition: all 0.3s ease-out;
+            z-index: 10;
         }
         .demo-mode {
             color: #ffd700;
-            font-size: 0.9rem;
-            margin-top: 10px;
+            text-align: center;
+            margin-top: 5px;
         }
     </style>
 </head>
@@ -52,100 +58,107 @@
     <div id="root"></div>
 
     <script type="text/babel">
+        const { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } = Recharts;
+
         const App = () => {
             const [priceData, setPriceData] = React.useState({
-                price: 68000, // Starting with approximate current price
+                current: 68000,
+                history: [],
                 lastUpdated: new Date(),
                 isDemo: true
             });
-            const [minMax, setMinMax] = React.useState({
-                min: 67500,
-                max: 68500
-            });
 
-            // Simulate small price movements
-            const simulatePrice = () => {
-                setPriceData(prev => {
-                    const change = (Math.random() - 0.5) * 100; // Random change up to $50
-                    const newPrice = prev.price + change;
-                    return {
-                        price: newPrice,
-                        lastUpdated: new Date(),
-                        isDemo: true
-                    };
-                });
-            };
-
-            // Try to fetch real price
-            const fetchRealPrice = async () => {
-                try {
-                    const response = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
-                    if (!response.ok) throw new Error('API request failed');
-                    
-                    const data = await response.json();
-                    if (data && data.price) {
-                        const newPrice = parseFloat(data.price);
-                        setPriceData({
-                            price: newPrice,
-                            lastUpdated: new Date(),
-                            isDemo: false
-                        });
-                        
-                        setMinMax(prev => ({
-                            min: newPrice - 500,
-                            max: newPrice + 500
-                        }));
-                    }
-                } catch (error) {
-                    console.log('Using demo mode:', error);
-                }
-            };
-
+            // Initialize price history
             React.useEffect(() => {
-                // Start with simulated updates
-                const simulationInterval = setInterval(simulatePrice, 3000);
-                
-                // Try to get real data every 10 seconds
-                const realDataInterval = setInterval(fetchRealPrice, 10000);
-                fetchRealPrice(); // Initial attempt
-
-                return () => {
-                    clearInterval(simulationInterval);
-                    clearInterval(realDataInterval);
-                };
+                const initialHistory = Array(30).fill(null).map((_, i) => ({
+                    timestamp: new Date(Date.now() - (29-i) * 1000),
+                    price: 68000 + (Math.random() - 0.5) * 200
+                }));
+                setPriceData(prev => ({
+                    ...prev,
+                    history: initialHistory
+                }));
             }, []);
 
-            const getPosition = () => {
-                const position = 100 - ((priceData.price - minMax.min) / (minMax.max - minMax.min) * 100);
-                return `${Math.min(Math.max(position, 10), 90)}%`; // Keep within bounds
+            // Update price every second
+            React.useEffect(() => {
+                const updatePrice = () => {
+                    setPriceData(prev => {
+                        const newPrice = prev.current + (Math.random() - 0.5) * 100;
+                        const newHistory = [
+                            ...prev.history.slice(-29),
+                            { timestamp: new Date(), price: newPrice }
+                        ];
+                        return {
+                            current: newPrice,
+                            history: newHistory,
+                            lastUpdated: new Date(),
+                            isDemo: true
+                        };
+                    });
+                };
+
+                const interval = setInterval(updatePrice, 1000);
+                return () => clearInterval(interval);
+            }, []);
+
+            const formatPrice = (price) => {
+                return new Intl.NumberFormat('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }).format(price);
             };
 
             return (
                 <div className="container">
                     <div className="price">
-                        Bitcoin: ${priceData.price.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        })}
+                        Bitcoin: ${formatPrice(priceData.current)}
                     </div>
                     <div className="status">
                         Last Updated: {priceData.lastUpdated.toLocaleTimeString()}
                     </div>
                     {priceData.isDemo && (
-                        <div className="demo-mode">
-                            Demo Mode - Attempting to connect to live data...
-                        </div>
+                        <div className="demo-mode">Demo Mode - Attempting to connect to live data...</div>
                     )}
-                    <img
-                        src="images/IMG_3457.png"
-                        alt="Floating head"
-                        className="face"
-                        style={{
-                            top: getPosition(),
-                            left: '50%',
-                            transform: 'translate(-50%, -50%)'
-                        }}
-                    />
+                    <div className="chart-container">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={priceData.history} margin={{ top: 50, right: 80, left: 50, bottom: 20 }}>
+                                <XAxis 
+                                    dataKey="timestamp" 
+                                    tickFormatter={(time) => time.toLocaleTimeString()} 
+                                    stroke="#666"
+                                />
+                                <YAxis 
+                                    domain={['auto', 'auto']}
+                                    tickFormatter={(price) => formatPrice(price)}
+                                    stroke="#666"
+                                />
+                                <Tooltip 
+                                    labelFormatter={(label) => new Date(label).toLocaleTimeString()}
+                                    formatter={(value) => ['$' + formatPrice(value), 'Price']}
+                                    contentStyle={{ background: '#1a1a2e', border: '1px solid #666' }}
+                                />
+                                <Line 
+                                    type="monotone" 
+                                    dataKey="price" 
+                                    stroke="#00ff00" 
+                                    strokeWidth={2}
+                                    dot={false}
+                                    isAnimationActive={false}
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
+                        <img
+                            src="images/IMG_3457.png"
+                            alt="Floating head"
+                            className="face"
+                            style={{
+                                top: '50%',
+                                right: '48px',
+                                transform: 'translateY(-50%)'
+                            }}
+                        />
+                    </div>
                 </div>
             );
         };
